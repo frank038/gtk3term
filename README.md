@@ -12,7 +12,7 @@ Features and options:
 - background colour
 - text colour
 - the new terminal can be open in the same directory of the actual terminal or not
-- ctrl+ +/- increases the font size (for the given terminal and for the session)
+- ctrl+ +/- increases/decrises the font size (for the given terminal and for the session)
 - folder path in the titlebar
 - contextual menu: open a new terminal, copy text, paste text, setting dialog
 - command line options: -e (execute the program passed as argument), -d (open the terminal in the passed folder).

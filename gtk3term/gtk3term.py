@@ -1,0 +1,559 @@
+#!/usr/bin/env python3
+
+# V. 0.5
+
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('Vte', '2.91')
+from gi.repository import Gtk, Vte, GLib, Pango, Gio, Gdk
+import os,sys,shutil
+import json
+
+curr_path = os.getcwd()
+my_home = os.getenv("HOME")
+if my_home == None or my_home == "":
+    _tmp_path = curr_path.split("/")
+    my_home = os.path.join(_tmp_path[1],_tmp_path[2])
+
+WINW = 1000
+WINH = 600
+MAXIMIZED = "False"
+GEOMETRY_CHANGED = False
+
+##
+# font size - background colour - foreground colour - open new terminal in the same anchestor terminal path
+default_config = {"font-size": 10, "background": "#000000000000", "foreground": "#ffffffffffff", "same-dir": 1}
+config_path = os.path.join(curr_path,"settings")
+config_file = os.path.join(config_path,"settings.json")
+_settings = None
+CONFIG_CHANGED = False
+if (os.path.exists(config_path) and os.access(config_path, os.W_OK)):
+    try:
+        _ff = open(config_file,"r")
+        _settings = json.load(_ff)
+        _ff.close()
+    except:
+        _settings = default_config
+
+if not _settings:
+    _settings = default_config
+
+# FONT_SIZE = 10
+# # ROWS = 0
+# # COLUMNS = 0
+# BACKGROUND_COLOR = "#000000000000"
+# FOREGROUND_COLOR = "#ffffffffffff"
+# SAME_DIR = 1
+
+FONT_SIZE = _settings["font-size"]
+FOREGROUND_COLOR = _settings["foreground"]
+BACKGROUND_COLOR = _settings["background"]
+SAME_DIR = _settings["same-dir"]
+
+# window size and state
+try:
+    _f = open(os.path.join(curr_path,"settings","cfgsize.txt"), "r")
+    _tmp = _f.read()
+    _f.close()
+    WINW, WINH, MAXIMIZED = _tmp.strip("\n").split(";")
+    WINW = int(WINW)
+    WINH = int(WINH)
+except:
+    WINW = 1000
+    WINH = 600
+
+_command = None
+_directory = None
+class TheWindow(Gtk.Window):
+    def __init__(self):
+        Gtk.Window.__init__(self, title="Terminal")
+        self.set_default_size(WINW, WINH)
+        
+        self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.add(self.main_box)
+        
+        self.connect("configure-event", self.window_resize)
+        self.connect("destroy", self.on_destroy)
+        
+        self._config_changed = 0
+        self.closed_by_user = False
+        
+        self.main_tab = Gtk.Notebook()
+        self.main_tab.set_scrollable(True)
+        self.main_tab.connect("page-reordered", self.on_page_reordered)
+        self.main_tab.connect("switch-page", self.on_page_switched)
+        self.main_box.add(self.main_tab)
+        
+        a = Gdk.RGBA(0.0,1.0,1.0) # also backgroun
+        b = Gdk.RGBA(0.0,1.0,1.0)
+        c = Gdk.RGBA(0.4,0.9,0.0) # prompt
+        d = Gdk.RGBA(1.0,1.0,0.0)
+        e = Gdk.RGBA(0.4,0.8,0.9) # path and folders
+        f = Gdk.RGBA(0.7,0.7,0.7) # images videos
+        g = Gdk.RGBA(1.0,1.0,0.0)
+        h = Gdk.RGBA(1.0,1.0,0.0) # also foreground
+        # self._palette = [a,b,c,d,e,f,g,h]
+        
+        a2 = Gdk.RGBA(1.0,0.5,0.0) # backup files
+        b2 = Gdk.RGBA(0.0,1.0,1.0)
+        c2 = Gdk.RGBA(0.4,0.9,0.0) #
+        d2 = Gdk.RGBA(1.0,1.0,0.0)
+        e2 = Gdk.RGBA(0.4,0.8,0.9) # path and folders?
+        f2 = Gdk.RGBA(1.0,1.0,0.0)
+        g2 = Gdk.RGBA(1.0,1.0,0.0)
+        h2 = Gdk.RGBA(1.0,1.0,0.0) # also foreground
+        self._palette = [a,b,c,d,e,f,g,h,a2,b2,c2,d2,e2,f2,g2,h2]
+        
+        if not (os.path.exists(my_home) and os.access(my_home, os.R_OK)):
+            self._message_dialog_yes("Home directory not accessible.")
+        else:
+            # self.first_tab()
+            if _directory:
+                if (os.path.exists(my_home) and os.access(my_home, os.R_OK)):
+                    self.on_add_tab(_directory, None)
+                else:
+                    self.on_add_tab("", None)
+            else:
+                self.on_add_tab("", None)
+            self.main_tab.set_current_page(1)
+    
+    def save_config(self, font_size,fcolor,bcolor,same_dir):
+        global FONT_SIZE
+        global FOREGROUND_COLOR
+        global BACKGROUND_COLOR
+        global SAME_DIR
+        global _settings
+        if font_size != FONT_SIZE or fcolor != FOREGROUND_COLOR \
+                or bcolor != BACKGROUND_COLOR or same_dir != SAME_DIR:
+            try:
+                _settings["font-size"] = int(font_size)
+                _settings["foreground"] = fcolor
+                _settings["background"] = bcolor
+                _settings["same-dir"] = same_dir
+                #
+                _ff = open(config_file,"w")
+                json.dump(_settings, _ff, indent = 4)
+                _ff.close()
+                #
+                FONT_SIZE = int(font_size)
+                FOREGROUND_COLOR = fcolor
+                BACKGROUND_COLOR = bcolor
+                SAME_DIR = same_dir
+            except Exception as E:
+                self.dialog_y_response(str(E), self)
+        
+        
+    def on_destroy(self, widget):
+        num_tabs = self.main_tab.get_n_pages()
+        for i in range(num_tabs):
+            _page = self.main_tab.get_nth_page(i)
+            self.main_tab.remove_page(0)
+        #
+        if GEOMETRY_CHANGED:
+            try:
+                _f = open(os.path.join(curr_path,"settings","cfgsize.txt"), "w")
+                _f.write("{};{};{}".format(WINW,WINH,MAXIMIZED))
+                _f.close()
+            except Exception as E:
+                self.dialog_y_response(str(E), self)
+        Gtk.main_quit()
+    
+    def window_resize(self, widget, event):
+        global WINW
+        global WINH
+        global MAXIMIZED
+        global GEOMETRY_CHANGED
+        _window = self.get_window()
+        if bool(_window.get_state() & Gdk.WindowState.MAXIMIZED):
+            if MAXIMIZED == "False":
+                MAXIMIZED = "True"
+                GEOMETRY_CHANGED = True
+        elif not bool(_window.get_state() & Gdk.WindowState.MAXIMIZED) or not \
+                        (WINW == event.width or WINH == event.height):
+            if MAXIMIZED == "True":
+                MAXIMIZED = "False"
+                GEOMETRY_CHANGED = True
+            else:
+                WINW = event.width
+                WINH = event.height
+                GEOMETRY_CHANGED = True
+    
+    def on_page_reordered(self, _notebook, _page, _num):
+        terminal = _page._term
+        terminal.grab_focus()
+    
+    def on_page_switched(self, _notebook, _page, _n_page):
+        # set the window title
+        if hasattr(_page, "_term"):
+            terminal = _page._term
+            _name = terminal.get_termprop_string("xterm.title")
+            if _name:
+                self.set_title(_name[0] or "")
+            #
+            terminal.grab_focus()
+    
+    def find_page_from_terminal(self, terminal):
+        t_page = None
+        num_tabs = self.main_tab.get_n_pages()
+        for i in range(num_tabs):
+            _page = self.main_tab.get_nth_page(i)
+            if _page._term == terminal:
+                t_page = _page
+                break
+        return t_page
+    
+    def on_termprop_changed(self, terminal, _prop):
+        _name = terminal.get_termprop_string(_prop)
+        if _name:
+            _page = self.find_page_from_terminal(terminal)
+            if _page:
+                _box_ch = self.main_tab.get_tab_label(_page).get_children() # _page.get_children()[0]
+                if _box_ch:
+                    _label = _box_ch[0]
+                    _label.set_text(_name[0])
+                    _label.set_tooltip_text(_name[0])
+                    # window title
+                    _curr_page = self.main_tab.get_nth_page(self.main_tab.get_current_page())
+                    if _curr_page == _page:
+                        self.set_title(_name[0])
+    
+    def on_font_changed(self, terminal, _type):
+        global FONT_SIZE
+        global CONFIG_CHANGED
+        if FONT_SIZE and FONT_SIZE > 4:
+            _font_desc = terminal.get_font()
+            FONT_SIZE += _type
+            _font_desc.set_size((FONT_SIZE)*Pango.SCALE)
+            terminal.set_font(_font_desc)
+            CONFIG_CHANGED = True
+        
+    def on_child_exited(self, terminal, _status):
+        if self.closed_by_user:
+            self.closed_by_user = False
+            return
+        num_tabs = self.main_tab.get_n_pages()
+        if num_tabs == 1:
+            # quit the programma
+            self.hide()
+            tab_page = self.main_tab.get_nth_page(0)
+            page_num = self.main_tab.page_num(tab_page)
+            self.main_tab.remove_page(page_num)
+            Gtk.main_quit()
+            return
+        for i in range(num_tabs):
+            _page = self.main_tab.get_nth_page(i)
+            if _page._term == terminal:
+                self.main_tab.remove_page(i)
+                break
+        #
+        curr_page = self.main_tab.get_nth_page(self.main_tab.get_current_page())
+        if curr_page:
+            terminal = curr_page._term
+            terminal.grab_focus()
+            
+    def on_new_tab(self):
+        if SAME_DIR:
+            curr_page = self.main_tab.get_nth_page(self.main_tab.get_current_page())
+            terminal = curr_page._term
+            _name = terminal.get_termprop_string("xterm.title")
+            if _name[0]:
+                _path_tmp = _name[0].split(":")[1].lstrip(" ")
+                _path = os.path.expanduser(_path_tmp)
+                if os.path.exists(_path) and os.access(_path, os.R_OK):
+                    self.on_add_tab(_path, self.main_tab.get_current_page()+1)
+                    return
+                else:
+                    self._message_dialog_yes("Directory not accessible:\n{}".format(_path))
+            else:
+                self.on_add_tab(my_home, None)
+        else:
+            self.on_add_tab(my_home, None)
+        
+    def on_add_tab(self, _path=None, _pos=None):
+        terminal = Vte.Terminal()
+        if FONT_SIZE and FONT_SIZE > 4:
+            _font_desc = terminal.get_font()
+            _font_desc.set_size(FONT_SIZE*Pango.SCALE)
+            terminal.set_font(_font_desc)
+        #
+        _color_fore = Gdk.RGBA()
+        _color_fore.parse(FOREGROUND_COLOR)
+        _color_back = Gdk.RGBA()
+        _color_back.parse(BACKGROUND_COLOR)
+        terminal.set_colors(_color_fore, _color_back, self._palette)
+        #
+        terminal.set_enable_bidi(True)
+        terminal.set_enable_shaping(True)
+        #
+        terminal.connect("termprop-changed", self.on_termprop_changed)
+        terminal.connect("decrease-font-size", self.on_font_changed, -1)
+        terminal.connect("increase-font-size", self.on_font_changed, 1)
+        terminal.connect("child-exited", self.on_child_exited)
+        # the page
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_hexpand(True)
+        scroller.set_vexpand(True)
+        scroller.add(terminal)
+        box.pack_start(scroller, False, True, 2)
+        #
+        tab_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        _label = _path
+        tab_label = Gtk.Label(label=_label)
+        tab_label.set_tooltip_text(_label)
+        tab_box.pack_start(tab_label,False,False,0)
+        tab_btn = Gtk.Button()
+        tab_btn.set_relief(Gtk.ReliefStyle.NONE)
+        _img = Gtk.Image.new_from_icon_name(Gtk.STOCK_CLOSE, 22)
+        tab_btn.set_image(_img)
+        tab_btn.connect("clicked", self.on_tab_btn)
+        tab_box.pack_start(tab_btn,False,False,0)
+        # child - tab_label or widget - position
+        if _pos == None:
+            self.main_tab.insert_page(box,tab_box, self.main_tab.get_n_pages())
+        else:
+            self.main_tab.insert_page(box,tab_box, _pos)
+        box._term = terminal
+        tab_btn._page = box
+        self.main_tab.set_tab_reorderable(box, True)
+        tab_label.show()
+        tab_btn.show()
+        self.main_tab.show_all()
+        if _pos == None:
+            self.main_tab.set_current_page(self.main_tab.get_n_pages()-1)
+        else:
+            self.main_tab.set_current_page(_pos)
+        #### contextual menu
+        menu = Gtk.Menu()
+        terminal.set_context_menu(menu)
+        ## actions
+        #
+        _act_new_tab = Gtk.MenuItem.new_with_label("New tab")
+        _act_new_tab.connect("activate", self.on_action_selected, "new", terminal)
+        menu.append(_act_new_tab)
+        _act_new_tab.show()
+        #
+        _act_sep = Gtk.SeparatorMenuItem()
+        menu.append(_act_sep)
+        _act_sep.show()
+        #
+        _act_copy = Gtk.MenuItem.new_with_label("Copy")
+        _act_copy.connect("activate", self.on_action_selected, "copy", terminal)
+        menu.append(_act_copy)
+        _act_copy.show()
+        #
+        _act_paste = Gtk.MenuItem.new_with_label("Paste")
+        _act_paste.connect("activate", self.on_action_selected, "paste", terminal)
+        menu.append(_act_paste)
+        _act_paste.show()
+        #
+        _act_sep = Gtk.SeparatorMenuItem()
+        menu.append(_act_sep)
+        _act_sep.show()
+        #
+        _act_settings = Gtk.MenuItem.new_with_label("Settings")
+        _act_settings.connect("activate", self.on_action_selected, "settings")
+        menu.append(_act_settings)
+        _act_settings.show()
+        #
+        if _command and shutil.which(_command):
+             _cmd = ["/usr/bin/bash", "-c", _command]
+        else:
+            _cmd = ["/usr/bin/bash"]
+        try:
+            terminal.spawn_async(
+                Vte.PtyFlags.DEFAULT,
+                _path,
+                _cmd,
+                None,
+                GLib.SpawnFlags.DO_NOT_REAP_CHILD,
+                None,
+                None,
+                -1,
+                None,
+                self.ready,
+                [self.main_tab.get_n_pages(), tab_btn]
+                )
+        except:
+            _cmd = ["/usr/bin/bash"]
+            terminal.spawn_async(
+                Vte.PtyFlags.DEFAULT,
+                _path,
+                _cmd,
+                None,
+                GLib.SpawnFlags.DO_NOT_REAP_CHILD,
+                None,
+                None,
+                -1,
+                None,
+                self.ready,
+                [self.main_tab.get_n_pages(), tab_btn]
+                )
+        # grab the focus
+        terminal.grab_focus()
+    
+    
+    def on_action_selected(self, _act, _type = None, terminal = None):
+        if _type == "new":
+            self.on_new_tab()
+        elif _type == "copy":
+            terminal.copy_clipboard_format(Vte.Format.TEXT) # .TEXT or .HTML
+        elif _type == "paste":
+            terminal.paste_clipboard()
+        elif _type == "settings":
+            configWin(self)
+    
+    # tab close button
+    def on_tab_btn(self, btn):
+        self.closed_by_user = True
+        if self.main_tab.get_n_pages() == 1:
+            # quit the program
+            self.hide()
+            tab_page = btn._page
+            page_num = self.main_tab.page_num(tab_page)
+            self.main_tab.remove_page(page_num)
+            Gtk.main_quit()
+            return
+        #
+        tab_page = btn._page
+        page_num = self.main_tab.page_num(tab_page)
+        self.main_tab.remove_page(page_num)
+        #
+        curr_page = self.main_tab.get_nth_page(self.main_tab.get_current_page())
+        terminal = curr_page._term
+        terminal.grab_focus()
+    
+    def ready(self, pty, task, _pid, args):
+        return
+    
+    def _message_dialog_yesno(self, _msg):
+        messagedialog = Gtk.MessageDialog(parent=self,
+                                          modal=True,
+                                          message_type=Gtk.MessageType.INFO,
+                                          buttons=Gtk.ButtonsType.OK_CANCEL,
+                                          text=_msg)
+        messagedialog.connect("response", self.dialog_yn_response)
+        messagedialog.show()
+    
+    def dialog_yn_response(self, messagedialog, response_id):
+        if response_id == Gtk.ResponseType.OK:
+            messagedialog.destroy()
+        elif response_id == Gtk.ResponseType.CANCEL:
+            messagedialog.destroy()
+        elif response_id == Gtk.ResponseType.DELETE_EVENT:
+            messagedialog.destroy()
+    
+    def _message_dialog_yes(self, _msg):
+        messagedialog = Gtk.MessageDialog(parent=self,
+                                          modal=True,
+                                          message_type=Gtk.MessageType.INFO,
+                                          buttons=Gtk.ButtonsType.OK,
+                                          text=_msg)
+        messagedialog.connect("response", self.dialog_y_response)
+        messagedialog.show()
+    
+    def dialog_y_response(self, messagedialog, response_id):
+        if response_id == Gtk.ResponseType.OK:
+            messagedialog.destroy()
+        elif response_id == Gtk.ResponseType.DELETE_EVENT:
+            messagedialog.destroy()
+
+class configWin(Gtk.Window):
+    def __init__(self, _parent):
+        super().__init__()
+        self.parent = _parent
+        self.main_box = Gtk.Box.new(1,0)
+        self.add(self.main_box)
+        #
+        ### settings FONT_SIZE FOREGROUND_COLOR BACKGROUND_COLOR SAME_DIR
+        ## font size
+        font_size_box = Gtk.Box.new(0,0)
+        self.main_box.pack_start(font_size_box,0,0,0)
+        font_size_lbl = Gtk.Label(label="Font size")
+        font_size_box.pack_start(font_size_lbl,1,1,0)
+        font_size_lbl.props.halign = 1
+        # 
+        self.font_size_sb = Gtk.SpinButton()
+        self.font_size_sb.set_numeric(True)
+        self.font_size_sb.set_increments(1.0,1.0)
+        self.font_size_sb.set_range(4.0,96.0)
+        self.font_size_sb.set_value(FONT_SIZE)
+        font_size_box.pack_start(self.font_size_sb,0,0,0)
+        ## text colour
+        box_foreground = Gtk.Box.new(0,0)
+        self.main_box.pack_start(box_foreground,0,0,0)
+        #
+        foreground_lbl = Gtk.Label("Text color ")
+        box_foreground.pack_start(foreground_lbl,1,1,0)
+        foreground_lbl.props.halign = 1
+        #
+        self.fcolor_btn = Gtk.ColorButton()
+        _color = Gdk.RGBA()
+        _color.parse(FOREGROUND_COLOR)
+        self.fcolor_btn.set_rgba(_color)
+        box_foreground.pack_start(self.fcolor_btn,0,0,0)
+        #
+        ## background colour
+        box_background = Gtk.Box.new(0,0)
+        self.main_box.pack_start(box_background,0,0,0)
+        #
+        background_lbl = Gtk.Label("Background color ")
+        box_background.pack_start(background_lbl,1,1,0)
+        background_lbl.props.halign = 1
+        #
+        self.bcolor_btn = Gtk.ColorButton()
+        _color = Gdk.RGBA()
+        _color.parse(BACKGROUND_COLOR)
+        self.bcolor_btn.set_rgba(_color)
+        # self.main_grid.attach(self.color_btn,1,1,0,0)
+        box_background.pack_start(self.bcolor_btn,0,0,0)
+        #
+        ## same directory
+        box_same_dir = Gtk.Box.new(0,0)
+        self.main_box.pack_start(box_same_dir,0,0,0)
+        same_dir_lbl = Gtk.Label(label="Same directory")
+        same_dir_lbl.set_tooltip_text("Open the new terminal in the same ancestor directory.")
+        box_same_dir.pack_start(same_dir_lbl,1,1,0)
+        same_dir_lbl.props.halign = 1
+        #
+        self.same_dir_cb = Gtk.ComboBoxText()
+        self.same_dir_cb.append_text("No")
+        self.same_dir_cb.append_text("Yes")
+        self.same_dir_cb.set_active(SAME_DIR)
+        box_same_dir.pack_start(self.same_dir_cb,0,0,0)
+        #
+        ### buttons
+        btn_box = Gtk.Box.new(0,0)
+        self.main_box.pack_start(btn_box,1,0,0)
+        #
+        cancel_btn = Gtk.Button(label="Cancel")
+        cancel_btn.connect("clicked", self.on_cancel)
+        btn_box.pack_start(cancel_btn,1,1,0)
+        cancel_btn.show()
+        #
+        accept_btn = Gtk.Button(label="Accept")
+        accept_btn.connect("clicked", self.on_accept)
+        btn_box.pack_start(accept_btn,1,1,0)
+        #
+        self.show_all()
+    
+    def on_accept(self, btn):
+        self.parent.save_config(self.font_size_sb.get_value(),self.fcolor_btn.get_rgba().to_color().to_string(),self.bcolor_btn.get_rgba().to_color().to_string(),self.same_dir_cb.get_active())
+        self.close()
+        
+    def on_cancel(self, btn):
+        self.close()
+
+if __name__ == '__main__':
+    _argv = sys.argv
+    if "-e" in _argv:
+        _command = _argv[_argv.index("-e")+1]
+    if "-d" in _argv:
+        _directory = _argv[_argv.index("-d")+1]
+    #
+    win=TheWindow()
+    win.show_all()
+    if MAXIMIZED == "True":
+        _window = win.get_window()
+        _window.maximize()
+    Gtk.main()

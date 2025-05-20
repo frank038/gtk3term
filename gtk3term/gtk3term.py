@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# V. 0.5
+# V. 0.5.1
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -68,6 +68,7 @@ class TheWindow(Gtk.Window):
     def __init__(self):
         Gtk.Window.__init__(self, title="Terminal")
         self.set_default_size(WINW, WINH)
+        self.set_icon_from_file(os.path.join(curr_path,"icons","terminal.png")
         
         self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.add(self.main_box)
@@ -358,6 +359,7 @@ class TheWindow(Gtk.Window):
         #
         if _command and shutil.which(_command):
              _cmd = ["/usr/bin/bash", "-c", _command]
+             self.set_title(_command)
         else:
             _cmd = ["/usr/bin/bash"]
         try:

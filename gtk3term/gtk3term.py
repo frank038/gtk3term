@@ -68,7 +68,7 @@ class TheWindow(Gtk.Window):
     def __init__(self):
         Gtk.Window.__init__(self, title="Terminal")
         self.set_default_size(WINW, WINH)
-        self.set_icon_from_file(os.path.join(curr_path,"icons","terminal.png")
+        self.set_icon_from_file(os.path.join(curr_path,"icons","terminal.png"))
         
         self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.add(self.main_box)

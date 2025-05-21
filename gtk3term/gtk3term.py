@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# V. 0.5.1
+# V. 0.6
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -21,8 +21,8 @@ MAXIMIZED = "False"
 GEOMETRY_CHANGED = False
 
 ##
-# font size - background colour - foreground colour - open new terminal in the same anchestor terminal path
-default_config = {"font-size": 10, "background": "#000000000000", "foreground": "#ffffffffffff", "same-dir": 1}
+# font name - font size - background colour - foreground colour - open new terminal in the same anchestor terminal path
+default_config = {"font-name": "", "font-size": 10, "background": "#000000000000", "foreground": "#ffffffffffff", "same-dir": 1}
 config_path = os.path.join(curr_path,"settings")
 config_file = os.path.join(config_path,"settings.json")
 _settings = None
@@ -44,7 +44,7 @@ if not _settings:
 # BACKGROUND_COLOR = "#000000000000"
 # FOREGROUND_COLOR = "#ffffffffffff"
 # SAME_DIR = 1
-
+FONT_NAME = _settings["font-name"]
 FONT_SIZE = _settings["font-size"]
 FOREGROUND_COLOR = _settings["foreground"]
 BACKGROUND_COLOR = _settings["background"]
@@ -118,15 +118,17 @@ class TheWindow(Gtk.Window):
                 self.on_add_tab("", None)
             self.main_tab.set_current_page(1)
     
-    def save_config(self, font_size,fcolor,bcolor,same_dir):
+    def save_config(self, font_name, font_size,fcolor,bcolor,same_dir):
+        global FONT_NAME
         global FONT_SIZE
         global FOREGROUND_COLOR
         global BACKGROUND_COLOR
         global SAME_DIR
         global _settings
-        if font_size != FONT_SIZE or fcolor != FOREGROUND_COLOR \
+        if font_name != FONT_NAME or font_size != FONT_SIZE or fcolor != FOREGROUND_COLOR \
                 or bcolor != BACKGROUND_COLOR or same_dir != SAME_DIR:
             try:
+                _settings["font-name"] = font_name
                 _settings["font-size"] = int(font_size)
                 _settings["foreground"] = fcolor
                 _settings["background"] = bcolor
@@ -136,6 +138,7 @@ class TheWindow(Gtk.Window):
                 json.dump(_settings, _ff, indent = 4)
                 _ff.close()
                 #
+                FONT_NAME = font_name
                 FONT_SIZE = int(font_size)
                 FOREGROUND_COLOR = fcolor
                 BACKGROUND_COLOR = bcolor
@@ -275,6 +278,8 @@ class TheWindow(Gtk.Window):
         if FONT_SIZE and FONT_SIZE > 4:
             _font_desc = terminal.get_font()
             _font_desc.set_size(FONT_SIZE*Pango.SCALE)
+            if FONT_NAME:
+                _font_desc.set_family("{}, monospace".format(FONT_NAME))
             terminal.set_font(_font_desc)
         #
         _color_fore = Gdk.RGBA()
@@ -467,7 +472,24 @@ class configWin(Gtk.Window):
         self.main_box = Gtk.Box.new(1,0)
         self.add(self.main_box)
         #
-        ### settings FONT_SIZE FOREGROUND_COLOR BACKGROUND_COLOR SAME_DIR
+        ### settings FONT_NAME FONT_SIZE FOREGROUND_COLOR BACKGROUND_COLOR SAME_DIR
+        ## font name
+        font_name_box = Gtk.Box.new(0,0)
+        self.main_box.pack_start(font_name_box,0,0,0)
+        font_name_lbl = Gtk.Label(label="Font name")
+        font_name_box.pack_start(font_name_lbl,1,1,0)
+        font_name_lbl.props.halign = 1
+        #
+        self.font_name_family = ""
+        self.font_name_btn = Gtk.Button(label="Choose a font")
+        if FONT_NAME:
+            self.font_name_btn.set_label(FONT_NAME)
+        self.font_name_btn.connect("clicked", self.on_font_name)
+        font_name_box.pack_start(self.font_name_btn,0,0,0)
+        #
+        self.font_name_clear = Gtk.Button(label="Reset")
+        self.font_name_clear.connect("clicked", self.on_font_reset)
+        self.main_box.pack_start(self.font_name_clear,0,0,0)
         ## font size
         font_size_box = Gtk.Box.new(0,0)
         self.main_box.pack_start(font_size_box,0,0,0)
@@ -539,8 +561,30 @@ class configWin(Gtk.Window):
         #
         self.show_all()
     
+    def on_font_reset(self, btn):
+        self.font_name_btn.set_label("Choose a font")
+        self.font_name_family = ""
+    
+    def on_font_name(self, btn):
+        _f = Gtk.FontChooserDialog()#.new(None,self)
+        _font_dsc = _f.get_font_desc()
+        _font_dsc.set_size(FONT_SIZE * Pango.SCALE)
+        if FONT_NAME:
+            _font_dsc.set_family(FONT_NAME)
+        _f.set_font_desc(_font_dsc)
+        response = _f.run()
+        if response == Gtk.ResponseType.OK:
+            self.font_name_btn.set_label(_f.get_font_face().get_family().get_name())
+            self.font_name_family = _f.get_font_face().get_family().get_name()
+            _font_size = int(_f.get_font_size()/1024)
+            self.font_size_sb.set_value(_font_size)
+            _f.destroy()
+        elif response == Gtk.ResponseType.CANCEL:
+            _f.destroy()
+
+        
     def on_accept(self, btn):
-        self.parent.save_config(self.font_size_sb.get_value(),self.fcolor_btn.get_rgba().to_color().to_string(),self.bcolor_btn.get_rgba().to_color().to_string(),self.same_dir_cb.get_active())
+        self.parent.save_config(self.font_name_family, self.font_size_sb.get_value(),self.fcolor_btn.get_rgba().to_color().to_string(),self.bcolor_btn.get_rgba().to_color().to_string(),self.same_dir_cb.get_active())
         self.close()
         
     def on_cancel(self, btn):

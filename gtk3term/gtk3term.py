@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# V. 0.6
+# V. 0.7
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -38,12 +38,6 @@ if (os.path.exists(config_path) and os.access(config_path, os.W_OK)):
 if not _settings:
     _settings = default_config
 
-# FONT_SIZE = 10
-# # ROWS = 0
-# # COLUMNS = 0
-# BACKGROUND_COLOR = "#000000000000"
-# FOREGROUND_COLOR = "#ffffffffffff"
-# SAME_DIR = 1
 FONT_NAME = _settings["font-name"]
 FONT_SIZE = _settings["font-size"]
 FOREGROUND_COLOR = _settings["foreground"]
@@ -85,24 +79,24 @@ class TheWindow(Gtk.Window):
         self.main_tab.connect("switch-page", self.on_page_switched)
         self.main_box.add(self.main_tab)
         
-        a = Gdk.RGBA(0.0,1.0,1.0) # also backgroun
-        b = Gdk.RGBA(0.0,1.0,1.0)
-        c = Gdk.RGBA(0.4,0.9,0.0) # prompt
-        d = Gdk.RGBA(1.0,1.0,0.0)
-        e = Gdk.RGBA(0.4,0.8,0.9) # path and folders
-        f = Gdk.RGBA(0.7,0.7,0.7) # images videos
-        g = Gdk.RGBA(1.0,1.0,0.0)
-        h = Gdk.RGBA(1.0,1.0,0.0) # also foreground
-        # self._palette = [a,b,c,d,e,f,g,h]
+        a = Gdk.RGBA(0.0,0.0,0.0) # also background
+        b = Gdk.RGBA(1.0,0.41,0.4)
+        c = Gdk.RGBA(0.275,0.75,0.0) # prompt
+        d = Gdk.RGBA(0.67,0.65,0.0)
+        e = Gdk.RGBA(0.44,0.61,1.0) # path and folders
+        f = Gdk.RGBA(0.85,0.41,0.96) # images videos
+        g = Gdk.RGBA(0.0,0.72,0.75)
+        h = Gdk.RGBA(0.74,0.74,0.74) # also foreground
         
-        a2 = Gdk.RGBA(1.0,0.5,0.0) # backup files
-        b2 = Gdk.RGBA(0.0,1.0,1.0)
-        c2 = Gdk.RGBA(0.4,0.9,0.0) #
-        d2 = Gdk.RGBA(1.0,1.0,0.0)
-        e2 = Gdk.RGBA(0.4,0.8,0.9) # path and folders?
-        f2 = Gdk.RGBA(1.0,1.0,0.0)
-        g2 = Gdk.RGBA(1.0,1.0,0.0)
-        h2 = Gdk.RGBA(1.0,1.0,0.0) # also foreground
+        a2 = Gdk.RGBA(0.47,0.47,0.47) # backup files
+        b2 = Gdk.RGBA(1.0,0.70,0.56)
+        c2 = Gdk.RGBA(0.0,0.93,0.48) #
+        d2 = Gdk.RGBA(0.71,0.85,0.0)
+        e2 = Gdk.RGBA(0.75,0.75,1.0) # path and folders?
+        f2 = Gdk.RGBA(1.0,0.65,0.875)
+        g2 = Gdk.RGBA(0.235,0.86,1.0)
+        h2 = Gdk.RGBA(1.0,1.0,1.0) # also foreground
+        
         self._palette = [a,b,c,d,e,f,g,h,a2,b2,c2,d2,e2,f2,g2,h2]
         
         if not (os.path.exists(my_home) and os.access(my_home, os.R_OK)):

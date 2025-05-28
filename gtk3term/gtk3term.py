@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# V. 0.7
+# V. 0.7.1
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -301,6 +301,8 @@ class TheWindow(Gtk.Window):
         _label = _path
         tab_label = Gtk.Label(label=_label)
         tab_label.set_tooltip_text(_label)
+        tab_label.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
+        tab_label.set_hexpand(True)
         tab_box.pack_start(tab_label,False,False,0)
         tab_btn = Gtk.Button()
         tab_btn.set_relief(Gtk.ReliefStyle.NONE)

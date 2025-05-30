@@ -415,7 +415,7 @@ class TheWindow(Gtk.Window):
             tab_page = btn._page
             page_num = self.main_tab.page_num(tab_page)
             self.main_tab.remove_page(page_num)
-            Gtk.main_quit()
+            self.on_destroy(self)
             return
         #
         tab_page = btn._page

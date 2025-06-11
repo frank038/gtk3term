@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
-# V. 0.7.2
+# V. 0.8
 
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Vte', '2.91')
-from gi.repository import Gtk, Vte, GLib, Pango, Gio, Gdk
-import os,sys,shutil
+from gi.repository import Gtk, Vte, GLib, Pango, Gio, Gdk, GObject
+import os,sys,shutil,signal,subprocess,time
 import json
+from threading import Thread, Event
 
 curr_path = os.getcwd()
 my_home = os.getenv("HOME")
@@ -69,6 +70,7 @@ class TheWindow(Gtk.Window):
         
         self.connect("configure-event", self.window_resize)
         self.connect("destroy", self.on_destroy)
+        self.connect('delete_event', self.close_window)
         
         self._config_changed = 0
         self.closed_by_user = False
@@ -77,7 +79,15 @@ class TheWindow(Gtk.Window):
         self.main_tab.set_scrollable(True)
         self.main_tab.connect("page-reordered", self.on_page_reordered)
         self.main_tab.connect("switch-page", self.on_page_switched)
+        # self.main_tab.connect("page-removed", self.on_page_removed)
         self.main_box.add(self.main_tab)
+        
+        # list of new terminal: [terminal, task] - ready function
+        self.list_terminal = []
+        
+        self._event = Event()
+        self._signal = SignalObject()
+        self._signal.connect("notify::propList", self.athreadslot)
         
         a = Gdk.RGBA(0.0,0.0,0.0) # also background
         b = Gdk.RGBA(1.0,0.41,0.4)
@@ -140,12 +150,29 @@ class TheWindow(Gtk.Window):
             except Exception as E:
                 self.dialog_y_response(str(E), self)
         
+    def on_close_destroy_window(self):
+        num_tabs = self.main_tab.get_n_pages()
+        if num_tabs > 0:
+            for i in range(num_tabs):
+                _page = self.main_tab.get_nth_page(i)
+                _ch = self.main_tab.get_tab_label(_page).get_children()
+                for el in _ch:
+                    if isinstance(el,Gtk.Button):
+                        el.do_activate(el)
+                        break
+        
+    def close_window(self, w, e):
+        self.on_close_destroy_window()
+        return True
         
     def on_destroy(self, widget):
-        num_tabs = self.main_tab.get_n_pages()
-        for i in range(num_tabs):
-            _page = self.main_tab.get_nth_page(i)
-            self.main_tab.remove_page(0)
+        # self._event.set()
+        # num_tabs = self.main_tab.get_n_pages()
+        # for i in range(num_tabs):
+            # _page = self.main_tab.get_nth_page(i)
+            # self.main_tab.remove_page(0)
+        #
+        self.on_close_destroy_window()
         #
         if GEOMETRY_CHANGED:
             try:
@@ -375,7 +402,7 @@ class TheWindow(Gtk.Window):
                 -1,
                 None,
                 self.ready,
-                [self.main_tab.get_n_pages(), tab_btn]
+                [box]
                 )
         except:
             _cmd = ["/usr/bin/bash"]
@@ -395,6 +422,13 @@ class TheWindow(Gtk.Window):
         # grab the focus
         terminal.grab_focus()
     
+    def ready(self, pty, task, _pid, args):
+        # <Vte.Terminal object at 0x7f6e83e6f8c0 (VteTerminal at 0x2a5ba090)>
+        # 15027
+        # None 
+        # [<Gtk.Box object at 0x7f8918460240 (GtkBox at 0x27ac6150)>]
+        self.list_terminal.append([pty,task])
+        return
     
     def on_action_selected(self, _act, _type = None, terminal = None):
         if _type == "new":
@@ -409,25 +443,79 @@ class TheWindow(Gtk.Window):
     # tab close button
     def on_tab_btn(self, btn):
         self.closed_by_user = True
+        ret = None
         if self.main_tab.get_n_pages() == 1:
             # quit the program
-            self.hide()
             tab_page = btn._page
-            page_num = self.main_tab.page_num(tab_page)
-            self.main_tab.remove_page(page_num)
-            self.on_destroy(self)
+            ret = self.terminate_process(tab_page._term)
+            # check the process
+            if ret != None:
+                self.athread = pidThread(ret[1], self._signal, 1, self._event, self)
+                self.athread.daemon = True
+                self.athread.start()
+            # # moved to athreadslot
+            # self.hide()
+            # page_num = self.main_tab.page_num(tab_page)
+            # self.main_tab.remove_page(page_num)
+            # self.on_destroy(self)
             return
         #
         tab_page = btn._page
+        ret = self.terminate_process(tab_page._term)
+        #
         page_num = self.main_tab.page_num(tab_page)
         self.main_tab.remove_page(page_num)
         #
         curr_page = self.main_tab.get_nth_page(self.main_tab.get_current_page())
         terminal = curr_page._term
         terminal.grab_focus()
+        # check the process
+        if ret != None:
+            self.athread = pidThread(ret[1], self._signal, 2, self._event, self)
+            self.athread.daemon = True
+            self.athread.start()
     
-    def ready(self, pty, task, _pid, args):
-        return
+    # def on_page_removed(self, notebook, child, page_num):
+        # pass
+        
+    
+    # terminate the working process before exiting
+    def terminate_process(self, _terminal):
+        _pid = None
+        for t in self.list_terminal[:]:
+            if t[0] == _terminal:
+                _pid = t[1]
+                try:
+                    # ret=os.kill(t[1], signal.SIGTERM)
+                    os.kill(t[1], signal.SIGKILL)
+                except Exception as E:
+                    return [str(E),t[1]]
+                    # try:
+                        # os.kill(t[1], signal.SIGKILL)
+                    # except Exception as E:
+                        # return t[1]
+                self.list_terminal.remove(t)
+                break
+        return [0, _pid]
+    
+    def athreadslot(self,_signal,_param):
+        _list = _signal.propList[0]
+        # _list = ["pid-thread-error" or "pid-thread-success", process_pid, num_of_tabs: 1 only one tab - 2 more than 1 tab]
+        _num_of_tabs = _list[2]
+        #
+        if _list[0] == "pid-thread-error":
+            self._message_dialog_yes("Is the process {} terminated?".format(_list[1]))
+            # if _num_of_tabs == 1:
+                # return
+            # elif _num_of_tabs == 2:
+                # return
+        elif _list[0] == "pid-thread-success":
+            # only one tab opened
+            if _num_of_tabs == 1:
+                self._event.set()
+                self.hide()
+                self.main_tab.remove_page(0)
+                self.on_destroy(self)
     
     def _message_dialog_yesno(self, _msg):
         messagedialog = Gtk.MessageDialog(parent=self,
@@ -460,6 +548,75 @@ class TheWindow(Gtk.Window):
             messagedialog.destroy()
         elif response_id == Gtk.ResponseType.DELETE_EVENT:
             messagedialog.destroy()
+
+
+class pidThread(Thread):
+    def __init__(self, _pid, _signal, _n, _event, _parent):
+        super(pidThread, self).__init__()
+        self._pid = _pid
+        self._signal = _signal
+        self._n = _n
+        self._event = _event
+        self._parent = _parent
+        
+    def run(self):
+        if self._event.is_set():
+            return
+        # check the process
+        list_pid = None
+        try:
+            i = 0
+            while i < 6:
+                list_pid = subprocess.check_output("pstree -p {}".format(self._pid), shell=True, universal_newlines=True).split("\n")
+                list_pid.remove('')
+                if list_pid == []:
+                    self._signal.propList = ["pid-thread-success", self._pid, self._n]
+                    return
+                time.sleep(2)
+                i += 1
+        except Exception as E:
+            pass
+        #
+        if list_pid != None:
+            self._signal.propList = ["pid-thread-error", self._pid, self._n]
+        return
+        #########
+
+class SignalObject(GObject.Object):
+    
+    def __init__(self):
+        GObject.Object.__init__(self)
+        self._name = ""
+        self.value = -99
+        self._list = []
+    
+    @GObject.Property(type=str)
+    def propName(self):
+        'Read-write integer property.'
+        return self._name
+
+    @propName.setter
+    def propName(self, name):
+        self._name = name
+    
+    @GObject.Property(type=int)
+    def propInt(self):
+        'Read-write integer property.'
+        return self.value
+
+    @propInt.setter
+    def propInt(self, value):
+        self.value = value
+    
+    @GObject.Property(type=object)
+    def propList(self):
+        'Read-write integer property.'
+        return self._list
+
+    @propList.setter
+    def propList(self, data):
+        self._list = [data]
+
 
 class configWin(Gtk.Window):
     def __init__(self, _parent):

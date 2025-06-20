@@ -5,6 +5,7 @@ Requirements:
 - python3
 - gtk3 python binding
 - vte python binding (gir1.2-vte-2.91)
+- pstree
 
 Features and options:
 - tabs
